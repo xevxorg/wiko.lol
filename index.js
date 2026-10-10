@@ -293,7 +293,7 @@ client.on('messageCreate', async msg => {
     const code = args[0]?.toUpperCase();
     if (!code) return msg.reply(`❌ Usage: \`${p}activate CODE\``);
     if (DB.redeemCode(code, msg.guild.id)) {
-      return msg.reply('✅ **PREMIUM ACTIVATED!** 🎉\nType `khelp` to see all features');
+      return msg.reply('✅ **PREMIUM ACTIVATED!** 🎉\nType `!help <current prefix>` to see all features');
     }
     return msg.reply('❌ Invalid/used code!');
   }
