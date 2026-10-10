@@ -139,7 +139,7 @@ function buildHomeEmbed(p, prem) {
       { name: 'Status', value: prem ? '✅ Premium' : '🔒 Free', inline: true }
     )
     .setTitle(`Welcome to ${config.botName}!`)
-    .setDescription('Your all-in-one server protection and utility bot.\n\nSelect a category from the dropdown menu below to explore my commands.')
+    .setDescription('Your all-in-one server protection and all in one bot.\n\nSelect a category from the dropdown menu below to explore my commands.')
     .setFooter({ text: `Use ${p}help <command> for details about a specific command` });
 }
 
@@ -505,7 +505,7 @@ client.on('ready', async () => {
   client.user.setPresence({
     status: 'online',
     activities: [{
-      name: 'khelp — 209 Commands ✨',
+      name: '@Osaragi Type !help To Show Available Commands',
       type: 1,
       url: 'https://twitch.tv/osaragi'
     }]
