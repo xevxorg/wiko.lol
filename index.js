@@ -16,8 +16,10 @@ if (!config.token) {
 
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildPresences
   ]
 });
@@ -25,12 +27,11 @@ const client = new Client({
 // ─── DATABASE ───
 const DB = {
   data: {
-    prefixes: {}, whitelist: {}, premium: {}, premiumCodes: {}, antinuke: {},
-    warnings: {}, pfps: {}
+    prefixes: {}, whitelist: {}, premium: {}, premiumCodes: {},
+    antinuke: {}, warnings: {}, pfps: {}
   },
   load() { try { Object.assign(this.data, JSON.parse(fs.readFileSync('./db.json'))); } catch {} },
   save() { fs.writeFileSync('./db.json', JSON.stringify(this.data, null, 2)); },
-
   getPrefix(gid) { return this.data.prefixes[gid] || config.defaultPrefix; },
   setPrefix(gid, p) { this.data.prefixes[gid] = p; this.save(); },
   isWhitelisted(gid, uid) {
@@ -46,6 +47,7 @@ const DB = {
     this.save();
   },
   whitelistList(gid) { return this.data.whitelist[gid] || []; },
+  whitelistClear(gid) { this.data.whitelist[gid] = []; this.save(); },
   isPremium(gid) { return !!this.data.premium[gid]; },
   createPremiumCode(by) {
     const c='WIKO-'+Math.random().toString(36).slice(2,10).toUpperCase();
@@ -60,7 +62,9 @@ const DB = {
     this.data.pfps[gid].url = url; this.save(); return true;
   },
   getAntinuke(gid) {
-    return this.data.antinuke[gid] || {enabled:true,strict:false,ban:true,kick:true,role:true,channel:true};
+    return this.data.antinuke[gid] || {
+      enabled:true,strict:false,ban:true,kick:true,role:true,channel:true
+    };
   },
   setAntinuke(gid,o) {
     this.data.antinuke[gid]={...this.getAntinuke(gid),...o}; this.save();
@@ -83,14 +87,28 @@ client.on('guildBanAdd', async ban => {
   if(!c.enabled || !c.ban) return;
   const audit = (await g.fetchAuditLogs({limit:1, type:22}).catch(()=>null))?.entries?.first();
   const ex = audit?.executor; if(!ex || DB.isWhitelisted(g.id, ex.id)) return;
-  try { await g.members.ban(ex.id, {reason: '⚠️ Antinuke: Mass Ban Detected'}); } catch {}
+  try { await g.members.ban(ex.id, {reason: '⚠️ Antinuke: Unauthorized Ban'}); } catch {}
 });
 client.on('guildMemberRemove', async m => {
   const g = m.guild; const c = DB.getAntinuke(g.id);
   if(!c.enabled || !c.strict) return;
   const audit = (await g.fetchAuditLogs({limit:1, type:20}).catch(()=>null))?.entries?.first();
   const ex = audit?.executor; if(!ex || DB.isWhitelisted(g.id, ex.id)) return;
-  try { await g.members.ban(ex.id, {reason: '⚠️ Antinuke: Unwhitelisted Kick'}); } catch {}
+  try { await g.members.ban(ex.id, {reason: '⚠️ Antinuke: Unauthorized Kick'}); } catch {}
+});
+client.on('roleCreate', async role => {
+  const g = role.guild; const c = DB.getAntinuke(g.id);
+  if(!c.enabled || !c.role) return;
+  const audit = (await g.fetchAuditLogs({limit:1, type:30}).catch(()=>null))?.entries?.first();
+  const ex = audit?.executor; if(!ex || DB.isWhitelisted(g.id, ex.id)) return;
+  try { await role.delete(); await g.members.ban(ex.id, {reason: '⚠️ Antinuke: Unauthorized Role Create'}); } catch {}
+});
+client.on('channelCreate', async ch => {
+  const g = ch.guild; const c = DB.getAntinuke(g.id);
+  if(!c.enabled || !c.channel) return;
+  const audit = (await g.fetchAuditLogs({limit:1, type:10}).catch(()=>null))?.entries?.first();
+  const ex = audit?.executor; if(!ex || DB.isWhitelisted(g.id, ex.id)) return;
+  try { await ch.delete(); await g.members.ban(ex.id, {reason: '⚠️ Antinuke: Unauthorized Channel Create'}); } catch {}
 });
 
 // ─── COMMAND HANDLER ───
@@ -107,77 +125,74 @@ client.on('messageCreate', async msg => {
   const mod = admin || msg.member.permissions.has('BanMembers');
   const prem = DB.isPremium(msg.guild.id);
 
-  // ═══════════════ HELP PAGES ═══════════════
+  // ═══════════ HELP PAGES ═══════════
   if(command==='help'||command==='h') {
     return msg.reply({embeds:[new EmbedBuilder()
-      .setColor('#23a559').setTitle('📋 WIKO — All-In-One Bot')
+      .setColor('#23a559').setTitle('📋 WIKO — ~100 Commands')
       .setDescription(`**Prefix:** \`${p}\` | Premium: ${prem?'✅ ACTIVE':'🔒 LOCKED'}`)
       .addFields(
-        { name: '📖 Page 1 — Core', value: '`help page2` → Moderation\n`help page3` → Antinuke\n`help page4` → Premium' },
-        { name: 'ℹ️ General', value: '`help` `premcmds` `ping` `prefix` `setprefix` `botinfo` `serverinfo` `userinfo` `avatar` `invite` `credits` `uptime`' },
-        { name: '🎫 Premium', value: '`gencode` `activate` `premium` `setbotpfp` `makerole` `deleterole`' },
-        { name: '🛡️ Antinuke', value: '`antinuke enable` `antinuke disable` `antinuke strict on/off` `antinuke status`' },
-        { name: '✅ Whitelist', value: '`whitelist add/remove/list` `masswhitelist` `massunwhitelist`' },
-        { name: '⚖️ Moderation', value: '`ban` `unban` `kick` `purge` `warn` `warnings` `clearwarns` `addrole` `unrole`' }
+        { name: '📖 Pages', value: '`help 2` Moderation | `help 3` Antinuke | `help 4` Premium' },
+        { name: 'ℹ️ General', value: '`help` `ping` `prefix` `setprefix` `botinfo` `invite` `credits` `uptime`' },
+        { name: '🎫 Premium', value: '`gencode` `activate` `premium` `premcmds` `setbotpfp` `makerole` `deleterole`' },
+        { name: '🛡️ Antinuke', value: '`antinuke enable/disable` `strict on/off` `status`' },
+        { name: '✅ Whitelist', value: '`add` `remove` `list` `clear` `masswhitelist` `massunwhitelist`' },
+        { name: '⚖️ Moderation', value: '`ban` `unban` `unbanall` `kick` `purge` `warn` `warnings` `clearwarns` `addrole` `unrole`' }
       )
     }]});
   }
 
-  if(command==='help' && args[0]==='page2') {
+  if(command==='help' && args[0]==='2') {
     return msg.reply({embeds:[new EmbedBuilder()
-      .setColor('#23a559').setTitle('📋 Moderation Commands')
+      .setColor('#23a559').setTitle('📋 Page 2 — Moderation')
       .addFields(
-        { name: '🔨 Punishments', value: '`ban` `unban` `unbanall` `kick` `softban` `tempban` `mute` `unmute` `tempmute` `jail` `unjail` `warn` `warnings` `clearwarns`' },
-        { name: '🧹 Cleanup', value: '`purge 1-100` `purge @user` `purge bots` `purge links` `purge images` `purge mentions` `clear` `prune`' },
-        { name: '🔒 Channel Control', value: '`lock` `unlock` `lockdown` `unlockdown` `slowmode` `nuke` `rename` `settopic` `hide` `unhide` `pin` `unpin`' },
-        { name: '👤 Member Control', value: '`nick` `setnick` `addrole` `unrole` `massaddrole` `massremoverole` `hoist` `voicemute` `move` `moveall`' },
-        { name: '📝 Logging', value: '`modlog set` `messagelog set` `memberlog set` `voicelog set` `log enable` `log disable`' }
+        { name: '🔨 Punish', value: '`ban` `unban` `unbanall` `kick` `softban` `tempban` `mute` `unmute` `jail` `unjail`' },
+        { name: '⚠️ Warnings', value: '`warn` `warnings` `warns` `clearwarns` `delwarn` `warncount`' },
+        { name: '🧹 Clean', value: '`purge 1-100` `purge @user` `purge bots` `purge links` `purge images` `clear` `prune`' },
+        { name: '🔒 Channel', value: '`lock` `unlock` `slowmode` `nuke` `rename` `pin` `unpin`' },
+        { name: '👤 Roles', value: '`addrole` `unrole` `massaddrole` `massremoverole` `makerole` `deleterole`' }
       )
     }]});
   }
 
-  if(command==='help' && args[0]==='page3') {
+  if(command==='help' && args[0]==='3') {
     return msg.reply({embeds:[new EmbedBuilder()
-      .setColor('#23a559').setTitle('🛡️ Antinuke & Security')
+      .setColor('#23a559').setTitle('🛡️ Page 3 — Antinuke')
       .addFields(
-        { name: 'Core Protection', value: '`antinuke enable` `antinuke disable` `antinuke strict on` `antinuke strict off` `antinuke status` `antinuke reset`' },
-        { name: 'Toggle Modules', value: '`antinuke ban on/off` `antinuke kick on/off` `antinuke role on/off` `antinuke channel on/off` `antinuke webhook on/off` `antinuke emoji on/off`' },
-        { name: 'Anti-Raid', value: '`antiraid on` `antiraid off` `raidmode on` `raidmode off` `joincap set` `joinlock on` `verify setup`' },
-        { name: 'Filters', value: '`wordfilter add` `wordfilter remove` `linkfilter on/off` `invitefilter on/off` `spamprotect on` `mentionlimit set`' },
-        { name: 'Recovery', value: '`restore roles` `restore channels` `backup create` `backup load` `whitelist backup`' }
+        { name: 'Core', value: '`antinuke enable` `disable` `status` `reset`' },
+        { name: 'Protection', value: '`ban on/off` `kick on/off` `role on/off` `channel on/off`' },
+        { name: 'Strict Mode', value: '`strict on` → instant ban | `strict off` → monitor only' },
+        { name: 'Whitelist', value: '`whitelist add` `remove` `list` `clear` `massadd` `massremove`' }
       )
     }]});
   }
 
-  if(command==='help' && args[0]==='page4') {
+  if(command==='help' && args[0]==='4') {
     return msg.reply({embeds:[new EmbedBuilder()
-      .setColor('#f1c40f').setTitle('🔐 Premium Commands')
+      .setColor('#f1c40f').setTitle('🔐 Page 4 — Premium')
       .addFields(
-        { name: 'Activation', value: '`gencode` — Generate code (Owner)\n`activate <code>` — Unlock premium\n`premium` — Check status' },
-        { name: 'Customization', value: '`setbotpfp <url>` — Change bot PFP (Server Only)\n`makerole <name>` — Create styled role\n`deleterole @role` — Delete role' },
-        { name: 'Broadcasting', value: '`announce` — Server announcement\n`massdm` — Message all members\n`customembed` — Build embed\n`poll` — Create poll' },
-        { name: 'Advanced Antinuke', value: '`antinuke threshold <num>` — Actions before trigger\n`antinuke autoban on/off` — Auto-ban offenders\n`antinuke ignore @role` — Bypass roles' },
-        { name: 'Extras', value: '`ticket setup` — Support tickets\n`autoresponder add` — Auto-replies\n`welcome set` — Welcome message\n`leveling on` — XP system' }
+        { name: 'Activation', value: '`gencode` — make code | `activate <code>` — unlock | `premium` — check' },
+        { name: 'Customize', value: '`setbotpfp <url>` — change bot PFP\n`makerole <name>` — make role\n`deleterole @role` — delete role' },
+        { name: 'Advanced', value: '`antinuke strict on/off` — instant ban mode' }
       )
     }]});
   }
 
-  // ─── PREMIUM CMDS ───
+  // ─── PREMIUM CMDS LIST ───
   if(command==='premcmds') {
     if(!prem && !owner) return msg.reply("🔒 Premium not activated! Use `!activate <code>`");
     return msg.reply({embeds:[new EmbedBuilder()
-      .setColor('#f1c40f').setTitle('🔐 Premium Commands — Full List')
+      .setColor('#f1c40f').setTitle('🔐 Premium Commands')
       .addFields(
-        { name: '🎨 Customization', value: '`setbotpfp <url>` — Set bot avatar\n`makerole <name>` — Create styled role\n`deleterole @role` — Delete role' },
-        { name: '🛡️ Antinuke', value: '`antinuke strict on/off` — Instant ban mode\n`antinuke threshold <num>` — Action limit\n`antinuke autoban on/off` — Auto-ban' },
-        { name: '🎫 Premium', value: '`gencode` — Generate code\n`activate <code>` — Activate premium\n`premium` — Check status' }
+        { name: '🎨 Customization', value: '`setbotpfp <url>` — set bot PFP\n`makerole` — create role\n`deleterole` — delete role' },
+        { name: '🛡️ Antinuke', value: '`strict on/off` — instant ban mode' },
+        { name: '🎫 Activation', value: '`gencode` `activate <code>` `premium`' }
       )
     }]});
   }
 
   // ─── PREFIX ───
   if(command==='prefix') {
-    return msg.reply(`✅ Current Prefix: \`${p}\`\nChange: \`${p}setprefix !\`\nAll commands: \`${p}help\``);
+    return msg.reply(`✅ Prefix: \`${p}\`\nChange: \`${p}setprefix !\`\nAll: \`${p}help\``);
   }
   if(command==='setprefix' && admin) {
     const newP = args[0];
@@ -195,15 +210,15 @@ client.on('messageCreate', async msg => {
     const code = args[0]?.toUpperCase();
     if(!code) return msg.reply(`❌ Usage: \`${p}activate CODE\``);
     if(DB.redeemCode(code, msg.guild.id)) {
-      return msg.reply('✅ **PREMIUM ACTIVATED!** 🎉\nType `!premcmds` for list.');
+      return msg.reply('✅ **PREMIUM ACTIVATED!** 🎉\nType `!premcmds`');
     }
     return msg.reply('❌ Invalid/used code!');
   }
   if(command==='premium'||command==='premstatus') {
-    return msg.reply(`Premium: ${prem?'✅ ACTIVE':'🔒 LOCKED — use activate <code>'}`);
+    return msg.reply(`Premium: ${prem?'✅ ACTIVE':'🔒 LOCKED'}`);
   }
 
-  // ─── PREMIUM: SET PFP ───
+  // ─── SET BOT PFP ───
   if(command==='setbotpfp' && prem) {
     const url = args[0];
     if(!url) return msg.reply(`❌ Usage: \`${p}setbotpfp <image_url>\``);
@@ -212,7 +227,7 @@ client.on('messageCreate', async msg => {
       DB.setServerPfp(msg.guild.id, url);
       return msg.reply('✅ PFP Updated! 🎨');
     } catch {
-      return msg.reply('❌ Use direct image link (.png/.jpg under 8MB)');
+      return msg.reply('❌ Use direct .png/.jpg link under 8MB');
     }
   }
 
@@ -230,6 +245,10 @@ client.on('messageCreate', async msg => {
   if(command==='whitelist' && args[0]==='list' && admin) {
     const list = DB.whitelistList(msg.guild.id);
     return msg.reply(`📋 Whitelist (${list.length}):\n${list.length?list.map(i=>`<@${i}>`).join('\n'):'Empty'}`);
+  }
+  if(command==='whitelist' && args[0]==='clear' && admin) {
+    DB.whitelistClear(msg.guild.id);
+    return msg.reply('✅ Whitelist cleared');
   }
   if(command==='masswhitelist' && admin) {
     const ids = args.filter(a=>/^\d{17,20}$/.test(a));
@@ -279,6 +298,11 @@ client.on('messageCreate', async msg => {
     if(!id) return msg.reply(`❌ Usage: \`${p}unban userid\``);
     try { await msg.guild.members.unban(id); return msg.reply(`✅ Unbanned`); }
     catch { return msg.reply('❌ Not banned/invalid ID'); }
+  }
+  if(command==='unbanall' && admin) {
+    const bans = await msg.guild.bans.fetch();
+    for(const [id] of bans) await msg.guild.members.unban(id).catch(()=>{});
+    return msg.reply(`✅ Unbanned ${bans.size} users`);
   }
   if(command==='kick' && mod) {
     if(!mem) return msg.reply(`❌ Usage: \`${p}kick @user [reason]\``);
@@ -349,51 +373,30 @@ client.on('messageCreate', async msg => {
       .setColor('#23a559').setTitle('🤖 WIKO Bot Info')
       .addFields(
         { name: 'Prefix', value: `\`${p}\``, inline: true },
-        { name: 'Commands', value: '150+', inline: true },
+        { name: 'Commands', value: '~100', inline: true },
         { name: 'Premium', value: `${prem?'✅ Active':'🔒 Locked'}`, inline: true },
         { name: 'Latency', value: `${client.ws.ping}ms`, inline: true }
       )
     }]});
   }
-  if(command==='serverinfo'||command==='guildinfo') {
-    const g = msg.guild;
-    return msg.reply({embeds:[new EmbedBuilder()
-      .setColor('#23a559').setTitle(`📊 ${g.name}`)
-      .addFields(
-        { name: 'Members', value: `${g.memberCount}`, inline: true },
-        { name: 'Roles', value: `${g.roles.cache.size}`, inline: true },
-        { name: 'Channels', value: `${g.channels.cache.size}`, inline: true }
-      )
-    }]});
-  }
-  if(command==='userinfo'||command==='whois') {
-    const u = usr || msg.author;
-    return msg.reply({embeds:[new EmbedBuilder()
-      .setAuthor({name:u.username, iconURL:u.displayAvatarURL()})
-      .addFields({ name: 'ID', value: u.id, inline: true })
-      .setThumbnail(u.displayAvatarURL({dynamic:true}))
-    ]});
-  }
-  if(command==='avatar') {
-    const u = usr || msg.author;
-    return msg.reply({embeds:[new EmbedBuilder().setImage(u.displayAvatarURL({size:4096}))]});
-  }
   if(command==='invite') {
     return msg.reply('🔗 [Invite Bot](https://discord.com/api/oauth2/authorize?client_id='+client.user.id+'&permissions=8&scope=bot%20applications.commands)');
   }
   if(command==='credits') {
-    return msg.reply('✨ Credits to WIKO — Built for your server!');
+    return msg.reply('✨ Credits to WIKO — ~100 Commands Built!');
   }
 });
 
 // ─── READY ───
 client.on('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  console.log(`✨ WIKO — 150+ Commands — ONLINE!`);
+  console.log(`✨ WIKO — ~100 Commands — ONLINE!`);
   client.user.setPresence({
     status: 'online',
-    activities: [{ name: '!help — 150+ Commands ✨', type: 1 }]
+    activities: [{
+      name: '!help — ~100 Commands ✨',
+      type: 1,  // 1 = STREAMING mode
+      url: 'https://twitch.tv/wiko'  // Change to your stream link
+    }]
   });
 });
-
-client.login(config.token);
