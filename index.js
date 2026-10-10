@@ -1,12 +1,14 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 const fs = require('fs');
 
 // ─── CONFIG ───
 const config = {
   token: process.env.TOKEN,
   ownerId: process.env.OWNER_ID || "1497456958783881296",
-  defaultPrefix: process.env.DEFAULT_PREFIX || "!",
-  logChannelId: process.env.LOG_CHANNEL_ID || null
+  defaultPrefix: process.env.DEFAULT_PREFIX || "k",
+  botName: "Osaragi",
+  totalCommands: 209,
+  botPfpUrl: "https://cdn.discordapp.com/attachments/1557976174163009606/1558294137021927535/f7162e50839e53367572f3a9c86e0601.jpg?ex=6acaea01&is=6ac99881&hm=e43b6d161eb1aa77bef0ad8f2c7d2e18741ebc42b0f490f53415a14be34e9a7f&"
 };
 
 if (!config.token) {
@@ -50,7 +52,7 @@ const DB = {
   whitelistClear(gid) { this.data.whitelist[gid] = []; this.save(); },
   isPremium(gid) { return !!this.data.premium[gid]; },
   createPremiumCode(by) {
-    const c = 'WIKO-' + Math.random().toString(36).slice(2, 10).toUpperCase();
+    const c = 'OSARAGI-' + Math.random().toString(36).slice(2,10).toUpperCase();
     this.data.premiumCodes[c] = { by, used: false };
     this.save();
     return c;
@@ -125,6 +127,127 @@ client.on('channelCreate', async ch => {
   try { await ch.delete(); await g.members.ban(ex.id, { reason: '⚠️ Antinuke: Unauthorized Channel Create' }); } catch {}
 });
 
+// ─── HELP EMBED + DROPDOWN ───
+function buildHomeEmbed(p, prem) {
+  return new EmbedBuilder()
+    .setColor('#b886fc')
+    .setAuthor({ name: config.botName })
+    .setThumbnail(config.botPfpUrl)
+    .addFields(
+      { name: 'Prefix', value: `\`${p}\``, inline: true },
+      { name: 'Total Commands', value: `${config.totalCommands}`, inline: true },
+      { name: 'Status', value: prem ? '✅ Premium' : '🔒 Free', inline: true }
+    )
+    .setTitle(`Welcome to ${config.botName}!`)
+    .setDescription('Your all-in-one server protection and utility bot.\n\nSelect a category from the dropdown menu below to explore my commands.')
+    .setFooter({ text: `Use ${p}help <command> for details about a specific command` });
+}
+
+function buildSelectMenu() {
+  return new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+    .setCustomId('help_menu')
+    .setPlaceholder('Select a category...')
+    .addOptions([
+      { label: '1. Antinuke', value: 'antinuke', description: 'Protect your server from nukers and mass actions' },
+      { label: '2. Moderation', value: 'moderation', description: 'Kick, ban, mute, warn and manage members' },
+      { label: '3. Logging', value: 'logging', description: 'Log server events to dedicated channels' },
+      { label: '4. Automod', value: 'automod', description: 'Auto-moderate spam, links, bad words and more' },
+      { label: '5. Greet & Farewell', value: 'greet', description: 'Welcome and farewell messages with custom styles' },
+      { label: '6. Giveaway', value: 'giveaway', description: 'Host, end, reroll and manage giveaways' },
+      { label: '7. Premium', value: 'premium', description: 'Unlock premium features' },
+      { label: '8. Fun', value: 'fun', description: 'Games, roasts, trivia and entertainment' },
+      { label: '9. Info', value: 'info', description: 'Bot statistics, uptime and general info' },
+      { label: '10. Util', value: 'util', description: 'Everyday utility tools and helper commands' }
+    ])
+  );
+}
+
+function buildCategoryEmbed(category, p) {
+  const embeds = {
+    antinuke: new EmbedBuilder()
+      .setColor('#b886fc')
+      .setTitle('🛡️ Antinuke')
+      .setDescription('Protect your server from nukers, rogue bots and mass actions')
+      .addFields(
+        { name: 'Core', value: `\`${p}antinuke enable/disable/status\`\n\`${p}strict on/off\`` },
+        { name: 'Whitelist', value: `\`${p}whitelist add/remove/list/clear\`\n\`${p}masswhitelist/massunwhitelist\`` },
+        { name: 'Protection', value: 'Auto-ban unwhitelisted users who:\n• Ban members\n• Kick members\n• Create roles\n• Create channels' }
+      ),
+    moderation: new EmbedBuilder()
+      .setColor('#b886fc')
+      .setTitle('⚖️ Moderation')
+      .setDescription('Kick, ban, mute, warn and manage your members')
+      .addFields(
+        { name: 'Punish', value: `\`${p}ban @user [reason]\`\n\`${p}unban ID\`\n\`${p}unbanall\`\n\`${p}kick @user [reason]\`` },
+        { name: 'Warnings', value: `\`${p}warn @user reason\`\n\`${p}warnings @user\`\n\`${p}clearwarns @user\`` },
+        { name: 'Roles', value: `\`${p}addrole @user @role\`\n\`${p}unrole @user @role\`\n\`${p}makerole [name]\`\n\`${p}deleterole @role\`` },
+        { name: 'Clean', value: `\`${p}purge 1-100\`` }
+      ),
+    logging: new EmbedBuilder()
+      .setColor('#b886fc')
+      .setTitle('📝 Logging')
+      .setDescription('Log server events to dedicated channels')
+      .addFields(
+        { name: 'Setup', value: `\`${p}logchannel set #channel\`\n\`${p}logchannel off\`` },
+        { name: 'Events', value: 'Member joins/leaves, bans, kicks, message deletes/edits, role changes, channel/role updates' }
+      ),
+    automod: new EmbedBuilder()
+      .setColor('#b886fc')
+      .setTitle('🤖 Automod')
+      .setDescription('Auto-moderate spam, links, bad words and more')
+      .addFields(
+        { name: 'Filters', value: `\`${p}automod link on/off\`\n\`${p}automod spam on/off\`\n\`${p}automod badword add/remove\`` },
+        { name: 'Actions', value: 'Auto-delete, warn, or kick rule-breakers' }
+      ),
+    greet: new EmbedBuilder()
+      .setColor('#b886fc')
+      .setTitle('👋 Greet & Farewell')
+      .setDescription('Welcome and farewell messages with custom styles')
+      .addFields(
+        { name: 'Welcome', value: `\`${p}welcome set #channel\`\n\`${p}welcome msg <text>\`\n\`${p}welcome preview\`` },
+        { name: 'Farewell', value: `\`${p}farewell set #channel\`\n\`${p}farewell msg <text>\`` }
+      ),
+    giveaway: new EmbedBuilder()
+      .setColor('#b886fc')
+      .setTitle('🎁 Giveaway')
+      .setDescription('Host, end, reroll and manage giveaways')
+      .addFields(
+        { name: 'Commands', value: `\`${p}g start #channel duration winners prize\`\n\`${p}g end [messageID]\`\n\`${p}g reroll [messageID]\`\n\`${p}g delete [messageID]\`` }
+      ),
+    premium: new EmbedBuilder()
+      .setColor('#ffd700')
+      .setTitle('🔐 Premium')
+      .setDescription('Unlock premium features with a server subscription')
+      .addFields(
+        { name: 'Activation', value: `\`${p}gencode\` — create code (owner only)\n\`${p}activate <code>\` — unlock premium\n\`${p}premium\` — check status` },
+        { name: 'Exclusive', value: `\`${p}setbotpfp <url>\` — server-only bot avatar\n\`${p}strict on\` — instant ban mode\nCustom role colors, advanced logging, priority support` }
+      ),
+    fun: new EmbedBuilder()
+      .setColor('#b886fc')
+      .setTitle('🎉 Fun')
+      .setDescription('Games, roasts, trivia and other entertainment')
+      .addFields(
+        { name: 'Available', value: `\`${p}8ball <question>\`\n\`${p}coinflip\`\n\`${p}dice\`\n\`${p}roast @user\`\n\`${p}rps\`\n\`${p}trivia\`` }
+      ),
+    info: new EmbedBuilder()
+      .setColor('#b886fc')
+      .setTitle('ℹ️ Info')
+      .setDescription('Bot statistics, uptime and general information')
+      .addFields(
+        { name: 'Stats', value: `\`${p}ping\` — latency\n\`${p}uptime\` — running time\n\`${p}botinfo\` — full info\n\`${p}invite\` — bot invite link\n\`${p}credits\` — credits` }
+      ),
+    util: new EmbedBuilder()
+      .setColor('#b886fc')
+      .setTitle('🔧 Util')
+      .setDescription('Everyday utility, tools and helper commands')
+      .addFields(
+        { name: 'General', value: `\`${p}prefix\` — show current prefix\n\`${p}setprefix <new>\` — change prefix\n\`${p}help\` — show this menu\n\`${p}help <command>\` — command details` },
+        { name: 'Server', value: `\`${p}serverinfo\` — server stats\n\`${p}membercount\` — member count\n\`${p}roleinfo @role\` — role details` }
+      )
+  };
+  return embeds[category]?.setFooter({ text: `Prefix: ${p}` }) || embeds.antinuke;
+}
+
 // ─── COMMAND HANDLER ───
 client.on('messageCreate', async msg => {
   if (!msg.guild || msg.author.bot) return;
@@ -139,73 +262,24 @@ client.on('messageCreate', async msg => {
   const mod = admin || msg.member.permissions.has('BanMembers');
   const prem = DB.isPremium(msg.guild.id);
 
-  // ─── HELP PAGES ───
+  // ─── HELP MENU ───
   if (command === 'help' || command === 'h') {
-    return msg.reply({ embeds: [new EmbedBuilder()
-      .setColor('#23a559').setTitle('📋 WIKO — ~100 Commands')
-      .setDescription(`**Prefix:** \`${p}\` | Premium: ${prem ? '✅ ACTIVE' : '🔒 LOCKED'}`)
-      .addFields(
-        { name: '📖 Pages', value: '`help 2` Moderation | `help 3` Antinuke | `help 4` Premium' },
-        { name: 'ℹ️ General', value: '`help` `ping` `prefix` `setprefix` `botinfo` `invite` `credits` `uptime`' },
-        { name: '🎫 Premium', value: '`gencode` `activate` `premium` `premcmds` `setbotpfp` `makerole` `deleterole`' },
-        { name: '🛡️ Antinuke', value: '`antinuke enable/disable` `strict on/off` `status`' },
-        { name: '✅ Whitelist', value: '`add` `remove` `list` `clear` `masswhitelist` `massunwhitelist`' },
-        { name: '⚖️ Moderation', value: '`ban` `unban` `unbanall` `kick` `purge` `warn` `warnings` `clearwarns` `addrole` `unrole`' }
-      )
-    ]});
-  }
-  if (command === 'help' && args[0] === '2') {
-    return msg.reply({ embeds: [new EmbedBuilder()
-      .setColor('#23a559').setTitle('📋 Page 2 — Moderation')
-      .addFields(
-        { name: '🔨 Punish', value: '`ban` `unban` `unbanall` `kick` `mute` `unmute`' },
-        { name: '⚠️ Warnings', value: '`warn` `warnings` `warns` `clearwarns`' },
-        { name: '🧹 Clean', value: '`purge 1-100` `purge @user` `purge bots` `purge links`' },
-        { name: '🔒 Channel', value: '`lock` `unlock` `slowmode` `nuke` `rename`' },
-        { name: '👤 Roles', value: '`addrole` `unrole` `makerole` `deleterole`' }
-      )
-    ]});
-  }
-  if (command === 'help' && args[0] === '3') {
-    return msg.reply({ embeds: [new EmbedBuilder()
-      .setColor('#23a559').setTitle('🛡️ Page 3 — Antinuke')
-      .addFields(
-        { name: 'Core', value: '`antinuke enable` `disable` `status`' },
-        { name: 'Protection', value: '`ban on/off` `kick on/off` `role on/off` `channel on/off`' },
-        { name: 'Strict Mode', value: '`strict on` → instant ban | `strict off` → monitor only' }
-      )
-    ]});
-  }
-  if (command === 'help' && args[0] === '4') {
-    return msg.reply({ embeds: [new EmbedBuilder()
-      .setColor('#f1c40f').setTitle('🔐 Page 4 — Premium')
-      .addFields(
-        { name: 'Activation', value: '`gencode` — make code | `activate <code>` — unlock | `premium` — check' },
-        { name: 'Customize', value: '`setbotpfp <url>` — change bot PFP\n`makerole <name>` — make role\n`deleterole @role` — delete role' }
-      )
-    ]});
-  }
-
-  // ─── PREMIUM CMDS LIST ───
-  if (command === 'premcmds') {
-    if (!prem && !owner) return msg.reply("🔒 Premium not activated! Use `!activate <code>`");
-    return msg.reply({ embeds: [new EmbedBuilder()
-      .setColor('#f1c40f').setTitle('🔐 Premium Commands')
-      .addFields(
-        { name: '🎨 Customization', value: '`setbotpfp <url>` — set bot PFP\n`makerole` — create role\n`deleterole` — delete role' },
-        { name: '🛡️ Antinuke', value: '`strict on/off` — instant ban mode' },
-        { name: '🎫 Activation', value: '`gencode` `activate <code>` `premium`' }
-      )
-    ]});
+    if (args[0]) {
+      return msg.reply(`ℹ️ Use: \`${p}help\` — open menu\nSelect from dropdown to browse categories`);
+    }
+    return msg.reply({
+      embeds: [buildHomeEmbed(p, prem)],
+      components: [buildSelectMenu()]
+    });
   }
 
   // ─── PREFIX ───
   if (command === 'prefix') {
-    return msg.reply(`✅ Prefix: \`${p}\`\nChange: \`${p}setprefix !\`\nAll: \`${p}help\``);
+    return msg.reply(`✅ Prefix: \`${p}\`\nChange: \`${p}setprefix k\``);
   }
   if (command === 'setprefix' && admin) {
     const newP = args[0];
-    if (!newP) return msg.reply(`❌ Usage: \`${p}setprefix !\``);
+    if (!newP) return msg.reply(`❌ Usage: \`${p}setprefix k\``);
     DB.setPrefix(msg.guild.id, newP);
     return msg.reply(`✅ Prefix → \`${newP}\``);
   }
@@ -219,12 +293,16 @@ client.on('messageCreate', async msg => {
     const code = args[0]?.toUpperCase();
     if (!code) return msg.reply(`❌ Usage: \`${p}activate CODE\``);
     if (DB.redeemCode(code, msg.guild.id)) {
-      return msg.reply('✅ **PREMIUM ACTIVATED!** 🎉\nType `!premcmds`');
+      return msg.reply('✅ **PREMIUM ACTIVATED!** 🎉\nType `khelp` to see all features');
     }
     return msg.reply('❌ Invalid/used code!');
   }
   if (command === 'premium' || command === 'premstatus') {
     return msg.reply(`Premium: ${prem ? '✅ ACTIVE' : '🔒 LOCKED'}`);
+  }
+  if (command === 'premcmds') {
+    if (!prem && !owner) return msg.reply("🔒 Premium not activated! Use `kactivate <code>`");
+    return msg.reply({ embeds: [buildCategoryEmbed('premium', p)] });
   }
 
   // ─── SET BOT PFP ───
@@ -358,7 +436,7 @@ client.on('messageCreate', async msg => {
   }
   if (command === 'makerole' && prem) {
     const name = args.join(' ') || 'New Role';
-    const r = await msg.guild.roles.create({ name, color: '#00ff88' });
+    const r = await msg.guild.roles.create({ name, color: '#b886fc' });
     return msg.reply(`✅ Created <@&${r.id}>`);
   }
   if (command === 'deleterole' && mod) {
@@ -379,12 +457,15 @@ client.on('messageCreate', async msg => {
   }
   if (command === 'botinfo' || command === 'about') {
     return msg.reply({ embeds: [new EmbedBuilder()
-      .setColor('#23a559').setTitle('🤖 WIKO Bot Info')
+      .setColor('#b886fc')
+      .setTitle(`🤖 ${config.botName} Info`)
+      .setThumbnail(config.botPfpUrl)
       .addFields(
         { name: 'Prefix', value: `\`${p}\``, inline: true },
-        { name: 'Commands', value: '~100', inline: true },
+        { name: 'Commands', value: `${config.totalCommands}`, inline: true },
         { name: 'Premium', value: `${prem ? '✅ Active' : '🔒 Locked'}`, inline: true },
-        { name: 'Latency', value: `${client.ws.ping}ms`, inline: true }
+        { name: 'Latency', value: `${client.ws.ping}ms`, inline: true },
+        { name: 'Owner', value: `<@${config.ownerId}>`, inline: true }
       )
     ]});
   }
@@ -392,20 +473,41 @@ client.on('messageCreate', async msg => {
     return msg.reply('🔗 [Invite Bot](https://discord.com/api/oauth2/authorize?client_id=' + client.user.id + '&permissions=8&scope=bot%20applications.commands)');
   }
   if (command === 'credits') {
-    return msg.reply('✨ Brought To You For Free - SuaveWiko — ~100 Commands Built!');
+    return msg.reply(`✨ ${config.botName} — All-in-One Antinuke & Utility Bot\nBuilt with ❤️`);
   }
 });
 
-// ─── READY — STREAMING STATUS ───
-client.on('ready', () => {
+// ─── DROPDOWN INTERACTION HANDLER ───
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isStringSelectMenu()) return;
+  if (interaction.customId !== 'help_menu') return;
+  const p = DB.getPrefix(interaction.guild.id);
+  const category = interaction.values[0];
+  await interaction.update({
+    embeds: [buildCategoryEmbed(category, p)],
+    components: [buildSelectMenu()]
+  });
+});
+
+// ─── READY — STREAMING STATUS + SET PFP ───
+client.on('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  console.log(`✨ Brought To You For Free - SuaveWiko — ~100 Commands — ONLINE!`);
+  console.log(`✨ ${config.botName} — ${config.totalCommands} Commands — ONLINE!`);
+  
+  // Set bot avatar
+  try {
+    await client.user.setAvatar(config.botPfpUrl);
+    console.log('✅ Bot PFP set!');
+  } catch (e) {
+    console.log('⚠️ Could not set PFP:', e.message);
+  }
+  
   client.user.setPresence({
     status: 'online',
     activities: [{
-      name: 'Type !help to see Available Commands! ✨',
+      name: 'khelp — 209 Commands ✨',
       type: 1,
-      url: 'https://twitch.tv/wiko'
+      url: 'https://twitch.tv/osaragi'
     }]
   });
 });
